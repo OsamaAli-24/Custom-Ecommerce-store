@@ -1,0 +1,354 @@
+import streamlit as st
+import pymysql.cursors     
+import pandas as pd
+from decimal import Decimal
+
+config = {
+    'user': 'root',
+    'password': '',
+    'host': '127.0.0.1',  
+    'database': 'pak_tech_db',
+    'cursorclass': pymysql.cursors.DictCursor
+}
+
+def get_products():
+    """Fetches product data from the MySQL database using PyMySQL."""
+    try:
+        connection = pymysql.connect(**config)
+        
+        with connection:
+            with connection.cursor() as cursor:
+                query = "SELECT * FROM products"
+                cursor.execute(query)
+                products = cursor.fetchall() 
+                return products
+                
+    except pymysql.Error as err:
+        st.error(f"Database error: {err}")
+        return [] 
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
+        return []
+st.set_page_config(
+    page_title="Pak Tech",
+    page_icon="💻",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+def initialize_state():
+    if "page" not in st.session_state:
+        st.session_state.page = "home"
+    if "cart" not in st.session_state:
+        st.session_state.cart = []
+    if "products" not in st.session_state or not st.session_state.products:
+        st.session_state.products = get_products()
+    if "order_successful" not in st.session_state:
+        st.session_state.order_successful = False
+    if "last_order_id" not in st.session_state:
+        st.session_state.last_order_id = None
+
+initialize_state()
+
+def change_page(page):
+    st.session_state.page = page
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    
+    body, .stApp {
+        background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+        font-family: 'Inter', sans-serif;
+        color: #eee;
+    }
+    h1, h2, h3, h4, h5 { color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+
+    .navbar-container {
+        display: flex; align-items: center; justify-content: space-between;
+        background: rgba(255,255,255,0.05); border-radius: 14px;
+        padding: 10px 25px; margin-bottom: 30px;
+        backdrop-filter: blur(12px); box-shadow: 0 4px 25px rgba(0,0,0,0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .navbar-logo { font-size: 1.8em; font-weight: 700; color: #fff; }
+    div[data-testid="stHorizontalBlock"] .stButton button {
+        background: transparent !important; color: #ddd !important;
+        font-size: 1.1em; padding: 8px 0; margin: 0 15px;
+        border: none !important; border-bottom: 2px solid transparent !important;
+        border-radius: 0 !important; transition: all 0.25s ease-in-out;
+        font-weight: 600;
+    }
+    div[data-testid="stHorizontalBlock"] .stButton button:hover {
+        color: #fff !important; border-bottom: 2px solid #00b4d8 !important;
+    }
+    div[data-testid="stHorizontalBlock"] .stButton button[kind="primary"] {
+        color: #00b4d8 !important; border-bottom: 2px solid #00b4d8 !important;
+    }
+    .product-card {
+        background: rgba(255,255,255,0.06); border-radius: 16px; 
+        padding: 12px; /* Reduced from 18px */
+        margin-bottom: 20px; /* Reduced from 25px */
+        text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        transition: transform 0.3s ease, box-shadow 0.3s ease; animation: fadeInUp 0.6s ease;
+        height: 100%; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .product-card:hover { transform: translateY(-6px); box-shadow: 0 8px 30px rgba(0,0,0,0.6); }
+    .product-card img { 
+        border-radius: 10px; margin-bottom: 10px; width: 100%; 
+        height: 140px; /* Reduced from 180px */
+        object-fit: cover; 
+    }
+    .price { 
+        color: #00ff99; 
+        font-size: 1.0rem; /* Reduced from 1.1rem */
+        font-weight: 600; 
+    }
+    .product-card h3 {
+        font-size: 2 em; /* Added to make font smaller */
+        height: 2.8em; /* Adjusted for new font size */
+        overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+        -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .product-card p {
+        font-size: 0.85rem; /* Added to make font smaller */
+        height: 4.2em; /* Adjusted for new font size */
+        overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+        -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+        margin-bottom: 0.8rem; /* Reduced margin */
+    }
+ 
+    
+    .stButton>button {
+        border-radius: 10px !important; background: linear-gradient(45deg, #00c3ff, #009fff);
+        border: none; padding: 8px 16px; font-weight: 600;
+        color: white; transition: all 0.3s ease;
+    }
+    .stButton>button:hover { background: linear-gradient(45deg, #009fff, #007bff); transform: scale(1.05); }
+    @keyframes fadeInUp { 0% { opacity: 0; transform: translateY(15px); } 100% { opacity: 1; transform: translateY(0); } }
+    .footer { margin-top: 50px; padding: 20px; text-align: center; font-size: 0.9rem; color: #aaa; border-top: 1px solid rgba(255,255,255,0.1); }
+</style>
+""", unsafe_allow_html=True)
+
+cart_count = sum(item.get('quantity', 0) for item in st.session_state.cart)
+logo_col, links_col, cart_col = st.columns([1.5, 3, 2])
+with logo_col:
+    st.markdown("<h2 class='navbar-logo'>Pak Tech</h2>", unsafe_allow_html=True)
+with links_col:
+    home_link, contact_link = st.columns(2)
+    with home_link:
+        if st.button("Home", use_container_width=True, type="primary" if st.session_state.page == 'home' else "secondary"): change_page("home")
+    with contact_link:
+        if st.button("Contact", use_container_width=True, type="primary" if st.session_state.page == 'contact' else "secondary"): change_page("contact")
+with cart_col:
+    cart_btn, checkout_btn = st.columns(2)
+    with cart_btn:
+        if st.button(f" View Cart ({cart_count})", use_container_width=True, type="primary" if st.session_state.page == 'cart' else "secondary"): change_page("cart")
+    with checkout_btn:
+        if st.button("Checkout", use_container_width=True, type="primary" if st.session_state.page == 'checkout' else "secondary", disabled=not st.session_state.cart): change_page("checkout")
+st.markdown('<div class="navbar-container-wrapper"></div>', unsafe_allow_html=True)
+
+
+PRODUCTS = st.session_state.products
+def add_to_cart(product):
+    for item in st.session_state.cart:
+        if item["id"] == product["id"]:
+            item["quantity"] += 1
+            st.toast(f"Added another {product['name']}!", icon="🛒")
+            return
+    st.session_state.cart.append({**product, "quantity": 1})
+    st.toast(f"Added {product['name']} to cart!", icon="✅")
+
+def remove_from_cart(pid):
+    st.session_state.cart = [i for i in st.session_state.cart if i["id"] != pid]
+    st.toast("Item removed from cart.", icon="🗑️")
+
+def save_contact_message(name, email, message):
+    """Saves a contact form message to the database."""
+    try:
+        connection = pymysql.connect(**config)
+        with connection:
+            with connection.cursor() as cursor:
+                sql = "INSERT INTO contact_messages (sender_name, sender_email, message_body) VALUES (%s, %s, %s)"
+                cursor.execute(sql, (name, email, message))
+            
+            connection.commit()
+        return True 
+    except pymysql.Error as err:
+        st.error(f"Database Error: Could not save message. {err}")
+        return False 
+
+def save_order(customer_details, cart_items):
+    """Saves order details and items to the database."""
+    try:
+        connection = pymysql.connect(**config)
+        
+        with connection:
+            with connection.cursor() as cursor:
+                sql_order = """
+                    INSERT INTO orders (customer_name, customer_email, shipping_address, payment_method)
+                    VALUES (%s, %s, %s, %s)
+                """
+                cursor.execute(sql_order, (
+                    customer_details['name'],
+                    customer_details['email'],
+                    customer_details['address'],
+                    customer_details['payment_method']
+                ))
+                
+              new_order_id = cursor.lastrowid
+  
+           sql_item = """
+                    INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
+                    VALUES (%s, %s, %s, %s)
+                """
+                for item in cart_items:
+                    cursor.execute(sql_item, (
+                        new_order_id,
+                        item['id'],
+                        item['quantity'],
+                        item['price'] 
+                    ))
+            
+            connection.commit()
+            return new_order_id # Return the new order ID on success
+            
+    except pymysql.Error as err:
+        st.error(f"Database error while saving order: {err}")
+        return None # Return None on failure
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
+        return None
+# --- PAGE RENDERING ---
+if st.session_state.page == "home":
+    st.title("Welcome to Pak Tech")
+    st.write("Shop the latest gadgets curated for innovators, creators, and dreamers.")
+    
+    # Check if products were fetched successfully
+    if PRODUCTS:
+        cols = st.columns(5)
+        for i, product in enumerate(PRODUCTS):
+            with cols[i % 5]:
+                st.markdown(f'<div class="product-card"><img src="{product["image_url"]}" /><h3>{product["name"]}</h3><p>{product["description"]}</p><p class="price">${product["price"]:.2f}</p></div>', unsafe_allow_html=True)
+                if st.button("Add to Cart", key=f"add_{product['id']}", use_container_width=True):
+                    add_to_cart(product)
+                    
+    else:
+        st.warning("No products found or error fetching products from the database.")
+
+
+elif st.session_state.page == "cart":
+    st.title("Your Shopping Cart")
+    if not st.session_state.cart:
+        st.info("Your cart is empty. Add some items from the Home page!")
+    else:
+        total = 0
+        for item in st.session_state.cart:
+            c1, c2, c3, c4 = st.columns([1.5, 3, 1.5, 1.5])
+            with c1: st.image(item['image_url'], width=100)
+            with c2: st.subheader(item['name']); st.write(f"Quantity: {item['quantity']}")
+            with c3: st.write(f"Price: ${item['price'] * item['quantity']:.2f}")
+            with c4:
+                if st.button("Remove", key=f"remove_{item['id']}", use_container_width=True):
+                    remove_from_cart(item["id"]); st.rerun()
+            total += item['price'] * item['quantity']; st.markdown("---")
+        st.subheader(f"Total: ${total:.2f}")
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button("Continue Shopping", use_container_width=True):
+                change_page("home"); st.rerun()
+        with b2:
+            if st.button("Proceed to Checkout", use_container_width=True, type="primary"):
+                change_page("checkout"); st.rerun()
+elif st.session_state.page == "checkout":
+    st.title("Checkout")
+
+    if st.session_state.order_successful:
+        st.success(f"✅ Order placed successfully! Your Order ID is: {st.session_state.last_order_id}")
+        st.balloons()
+        
+        if st.button("Shop Again"):
+            st.session_state.order_successful = False
+            st.session_state.last_order_id = None
+            change_page("home")
+            st.rerun()
+
+    elif not st.session_state.cart:
+        st.error("Your cart is empty. Please add items before checking out.")
+        if st.button("Back to Home"):
+            change_page("home")
+            st.rerun()
+            
+    else:
+        with st.form("checkout_form"):
+            st.subheader("Shipping Information")
+            name = st.text_input("Full Name")
+            email = st.text_input("Email Address")
+            address = st.text_area("Shipping Address")
+            
+            st.subheader("Payment Method")
+            payment_method = st.radio("Choose your payment method", ["💳 Card Payment", "💵 Cash on Delivery"])
+            
+            card_number, exp_date, cvv = "", "", ""
+            if payment_method == "💳 Card Payment":
+                card_number = st.text_input("Card Number", max_chars=19, placeholder="0000 1111 2222 3333")
+                exp_date = st.text_input("Expiration Date (MM/YY)", max_chars=5, placeholder="MM/YY")
+                cvv = st.text_input("CVV", max_chars=4, type="password", placeholder="123")
+            
+            submitted = st.form_submit_button("Place Order")
+
+        if submitted:
+            # --- MODIFICATION STARTS HERE ---
+            
+            # Define the allowed domains in a tuple for easy checking
+            allowed_domains = ('@gmail.com', '@ymail.com', '@hotmail.com')
+
+            if not all([name, email, address]):
+                st.error("⚠️ Please fill in all shipping details.")
+            
+            # Check if the email ends with ANY of the strings in the allowed_domains tuple
+            elif not email.strip().lower().endswith(allowed_domains):
+                st.error("⚠️ Please use a valid email from Gmail, Ymail, or Hotmail.")
+            
+            # --- MODIFICATION ENDS HERE ---
+
+            elif payment_method == "💳 Card Payment" and not all([card_number, exp_date, cvv]):
+                st.error("⚠️ Please fill in all card details for card payment.")
+            
+            else:
+                customer_details = {
+                    "name": name, "email": email, "address": address, "payment_method": payment_method
+                }
+                
+                new_order_id = save_order(customer_details, st.session_state.cart)
+                
+                if new_order_id:
+                    st.session_state.order_successful = True
+                    st.session_state.last_order_id = new_order_id
+                    st.session_state.cart = [] 
+                    st.rerun() 
+                else:
+                    st.error("❌ There was a problem placing your order. Please try again.")
+elif st.session_state.page == "contact":
+    st.title("Contact Us")
+    with st.form("contact_form", clear_on_submit=True):
+        st.write("We’d love to hear from you! Fill out the form below:")
+        name = st.text_input("Your Name")
+        email = st.text_input("Your Email")
+        message = st.text_area("Message")
+        submitted = st.form_submit_button("Send Message")
+        if submitted:
+            allowed_domains = ('@gmail.com', '@ymail.com', '@hotmail.com')
+            if not all([name, email, message]):
+                st.error("⚠️ Please fill in all fields.")
+            elif not email.strip().lower().endswith(allowed_domains):
+                st.error("⚠️ Please use a valid email from Gmail, Ymail, or Hotmail.")    
+            else:
+              is_successful = save_contact_message(name, email, message)
+              if is_successful:
+               st.success("Message sent successfully! We'll be in touch.")
+              else:
+               st.error("Sorry, there was a problem sending your message. Please try again later.")
+
+# --- FOOTER ---
+st.markdown("""<hr style="border-color: rgba(255,255,255,0.1);">""", unsafe_allow_html=True)
+st.markdown("""<div class="footer">© 2025 Pak Tech. All rights reserved.</div>""", unsafe_allow_html=True)
+
